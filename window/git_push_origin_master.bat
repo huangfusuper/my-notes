@@ -1,5 +1,5 @@
 @echo off
-git add ./
+git add ../
 git add -u
 git add -A
 echo Please enter your submission information........
