@@ -2,9 +2,9 @@
 git add ./
 git add -u
 git add -A
-echo 请输入提交信息........
+echo Please enter your submission information........
 set /p remarks=
-echo 输入的提交信息是 %remarks%.
+echo The submitted submission information is %remarks%.
 git commit -m %remarks%.
 git push origin master
 set remarks=
