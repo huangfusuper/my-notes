@@ -1,158 +1,67 @@
-# SpringBoot过滤器的简单使用
+# SpringBoot拦截器的简单使用
 
-**Filter是Servlet的加强版，能够在请求前后进行处理！可以使请求在执行资源前预先处理数据，也可以在处理资源后进行处理！**
+Web开发中，我们除了使用 Filter 来过滤请web求外，还可以使用Spring提供的HandlerInterceptor（拦截器）。他和Filter(过滤器)类似，但是可以提供比**过滤器更加精准的控制**！拦截器可以在请求执行请求资源的  **前  中  后  三个时间段**进行处理！
 
-## 一、SpringBoot使用Servlet Filter
+## 一、代码实现
 
-> filter是依赖于Servlet容器的，所以在SpringBoot使用Filter的时候也需要实现javax.servlet.Filter
-
-## 二、项目演示
-
-### pom文件
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-
-    <groupId>com.filter</groupId>
-    <artifactId>test-filter</artifactId>
-    <version>1.0-SNAPSHOT</version>
-
-
-
-    <!-- Inherit defaults from Spring Boot -->
-    <parent>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.1.8.RELEASE</version>
-    </parent>
-
-
-    <dependencies>
-        <!--springboot-web启动-->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <!--springboot aop支持-->
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-aop</artifactId>
-        </dependency>
-    </dependencies>
-
-
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
-    </build>
-</project>
-```
-
-
+> SpringBoot所提供的的拦截器相对来说较为简单，只需要实现***`HandlerInterceptor`***这个接口就可以了
 
 ```java
-package com.demo.filter;
+package com.demo.interceptor;
 
-import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.HandlerInterceptor;
+import org.springframework.web.servlet.ModelAndView;
 
-import javax.servlet.*;
-import javax.servlet.annotation.WebFilter;
-import java.io.IOException;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 /**
- * 自定义拦截器
  * @author huangfu
  */
-@Component
-@WebFilter(filterName = "MyFilter",urlPatterns = {"/*"})
-public class MyFilter implements Filter {
+public class TestInterceptor implements HandlerInterceptor {
     @Override
-    public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain) throws IOException, ServletException {
-        System.out.println("-----------------执行过滤器---------------------");
-        filterChain.doFilter(servletRequest,servletResponse);
+    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
+        System.out.println("请求执行前先拦截");
+        return true;
+    }
+
+    @Override
+    public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) throws Exception {
+        System.out.println("这个方法中你可以对ModelAndView进行操作，请求资源执行后，DispatcherServlet进行视图的渲染之前");
+    }
+
+    @Override
+    public void afterCompletion(HttpServletRequest request, HttpServletResponse response, Object handler, Exception ex) throws Exception {
+        System.out.println("请求执行后拦截，DispatcherServlet进行视图的渲染之后，多用关闭资源");
     }
 }
 
 ```
 
-> ```java
-> @WebFilter(filterName = "MyFilter",urlPatterns = {"/*"})
-> ```
->
-> ***`filterName`***:指定过滤器的名字
->
-> ***`urlPatterns`***:指定拦截的路径 *匹配全部
-
-## 三、多个过滤器的顺序问题
-
-单项目中出现多个过滤器的情况下，如果对顺序有严格的要求，我们可以手动指定顺序大小
-
->***`@Order(int level)`***:数值越小，越优先执行！
-
-**过滤器1开发**
+> 然后将这个拦截器注册到配置类
 
 ```java
-package com.demo.filter;
+package com.demo.conf;
 
-import org.springframework.core.annotation.Order;
-import org.springframework.stereotype.Component;
+import com.demo.interceptor.TestInterceptor;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-import javax.servlet.*;
-import javax.servlet.annotation.WebFilter;
-import java.io.IOException;
-
-/**
- * 自定义拦截器
- * @author huangfu
- */
-@Component
-@WebFilter(filterName = "MyFilter",urlPatterns = {"/*"})
-@Order(1)
-public class MyFilter implements Filter {
+@Configuration
+public class CorsConfig implements WebMvcConfigurer {
+  
     @Override
-    public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain) throws IOException, ServletException {
-        System.out.println("-----------------执行过滤器1---------------------");
-        filterChain.doFilter(servletRequest,servletResponse);
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(new TestInterceptor())
+            	//这个会拦截所求的路径
+                .addPathPatterns("/**");
+        //.excludePathPatterns("/login")  排除某些路径
     }
 }
 
 ```
 
-**过滤器2开发**
+> 运行结果
 
-```java
-package com.demo.filter;
-
-
-import org.springframework.core.annotation.Order;
-import org.springframework.stereotype.Component;
-
-import javax.servlet.*;
-import javax.servlet.annotation.WebFilter;
-import java.io.IOException;
-
-/**
- * @author huangfu
- */
-@Component
-@WebFilter(filterName = "MyFilter2",urlPatterns = {"/*"})
-@Order(2)
-public class MyFilter2 implements Filter {
-    @Override
-    public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse, FilterChain filterChain) throws IOException, ServletException {
-        System.out.println("-----------执行过滤器2----------------");
-        filterChain.doFilter(servletRequest,servletResponse);
-    }
-}
-
-```
-
-> **结果：过滤器1优先执行**
+![1570780031275](../image/1570780031275.png)
