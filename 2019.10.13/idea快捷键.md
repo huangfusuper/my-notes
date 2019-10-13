@@ -1,6 +1,6 @@
 # IDEA快捷键
 
-Ctrl+Z：撤销**
+**Ctrl+Z：撤销**
 
 **Ctrl+Shift+Z：重做**
 
