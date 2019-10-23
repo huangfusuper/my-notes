@@ -62,6 +62,6 @@ public class CorsConfig implements WebMvcConfigurer {
 
 ```
 
-> 运行结果
+> 运行结果：
 
 ![1570780031275](../image/1570780031275.png)
