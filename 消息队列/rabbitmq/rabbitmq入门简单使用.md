@@ -16,13 +16,13 @@
 
 ### 1.基本消息队列图示
 
-![](../image/python-one.webp)
+![](../../image/python-one.webp)
 
 > P是生产者  用户生产消息将消息放入消息队列，C是消费者 ，从队列里将消息取出
 
 ### 2.发送消息
 
-![](../image/send.webp)
+![](../../image/send.webp)
 
 > 代码实现如下：
 

@@ -7,7 +7,7 @@
 > 工作队列又称之为任务队列，他主要就是为了解决在执行密集型耗时任务时，消息可以根据消费者的负荷进行合理的分配，从而不会形成一个消费者忙死，另外一个消费者闲死的情况！
 
 **运行图例**
-![](../image/python-two.webp)
+![](../../image/python-two.webp)
 
 
 
@@ -196,7 +196,7 @@ public class WorkCoummer2 {
 >
 > 3.将自动发送回执，改为手动发送回执！
 
-![img](../image/prefetch-count.png)
+![img](../../image/prefetch-count.png)
 
 **所以，我们需要消息队列提供的basicQos（1）来解决这个问题**
 

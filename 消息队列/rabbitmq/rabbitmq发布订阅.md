@@ -18,7 +18,7 @@
 
 你可以将交换机想象成一个分发器更好容易理解，**消息生产者你可以理解为皇帝，他所下发的命令都由圣旨传递，皇帝当然不可能亲自去送圣旨，所以这个工作由太监来承担，这里的太监就是交换机，由太监根据圣旨类型送到文武百官手里，这里文武百官也就是消费者。**大概看一下流程图：
 
-![img](../image/exchanges.png)
+![img](../../image/exchanges.png)
 
 > 其中  X 就是交换机
 >
@@ -243,7 +243,7 @@ public class PsCoummer2 {
 
 ***完成流程图***
 
-![img](../image/python-three-overall.png)
+![img](../../image/python-three-overall.png)
 
 ## 二、临时队列
 
