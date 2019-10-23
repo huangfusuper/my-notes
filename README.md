@@ -12,9 +12,9 @@
 
 > 1. [SpringBoot过滤器的简单使用](./SpringBoot/SpringBoot过滤器的简单使用.md)
 > 2. [SpringBoot拦截器的简单使用](./SpringBoot/SpringBoot拦截器的简单使用.md)
->
-> 3. [SpringBoot执行跨域处理](./SpringBoot/SpringBoot执行跨域处理.md)
+>3. [SpringBoot执行跨域处理](./SpringBoot/SpringBoot执行跨域处理.md)
 > 4.  [SpringBoot对全局异常的处理封装](./SpringBoot/SpringBoot对全局异常的处理封装.md)
+> 5. [开发一个自定义的SpringBoot自动配置组件](./SpringBoot/开发一个自定义的SpringBoot自动配置组件.md)
 
 ### 2.[spring](./Spring)
 
@@ -33,11 +33,14 @@
 
 ### 4.[工具类](./工具类)
 
-> 1.[SpringUtil普通类获取SpringBean](./工具类/SpringUtil普通类获取SpringBean.md)
+> 1. [SpringUtil普通类获取SpringBean](./工具类/SpringUtil普通类获取SpringBean.md)
 
 ### 5.[工具使用](./工具使用)
 
-> 1.[idea快捷键](./工具使用/idea快捷键.md)
+> 1. [idea快捷键](./工具使用/idea快捷键.md)
+> 2. [常用命令](./工具使用/常用命令.md)
+>
+> 
 
 ### 6.[分布式事务](./分布式事务)
 
