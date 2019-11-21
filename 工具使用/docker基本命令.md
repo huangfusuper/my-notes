@@ -45,6 +45,8 @@ yum list docker-ce.x86_64 --showduplicates | sort -r
 yum install docker-ce -y
 ```
 
+## 基本使用
+
 > 查看 docker版本
 
 ```shell
@@ -85,23 +87,58 @@ docker pull centos
 
 ```shell
 docker run --name myos -d centos
+
+docker run -it --rm centos bash
+
+-it 提供交互界面
+--rm 退出后删除容器
+bash 进入容器的后台
 ```
 
-> 删除镜像
+> 删除容器
 
 ```shell
 docker container rm -f myos
 ```
 
-> 另一种运行镜像的方式
+>删除虚悬镜像
 
-```shell
-docker run --name myos -it -d centos
+```bash
+docker image prune
 ```
 
-> 进入容器镜像
+>删除镜像
+
+```bash
+docker rmi -f myos
+```
+
+`容器和镜像是不一样的   容器更像对象  镜像是生成容器的东西`
+
+> 进入运行中的容器镜像
 
 ```shell
-docker exec -it myos /bin/bash
+docker exec -it id bash
+```
+
+> 定制Dockerfile
+
+```bash
+FROM tomcat
+WORKDIR /usr/local/tomcat/webapps/ROOT/
+RUN rm -rf *
+COPY 当前目录的文件 镜像文件目录(以工作目录为相对路径)
+
+FROM:指定基础镜像
+WORKDIR：指定工作目录  就是bash进的那个
+RUN:后面根的是控制台的命令
+COPY:复制
+ADD:COPY的增强版自动解压tar包
+```
+
+> 定制镜像
+
+```bash
+docker build -t 标签名（自定） .
 ```
 
