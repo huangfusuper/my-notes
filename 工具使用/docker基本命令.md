@@ -93,6 +93,8 @@ docker run -it --rm centos bash
 -it 提供交互界面
 --rm 退出后删除容器
 bash 进入容器的后台
+-v 宿主机地址:容器地址  数据卷  做持久化操作的，将宿主机和容器的文件映射
+-d 守护线程运行
 ```
 
 > 删除容器
@@ -106,6 +108,14 @@ docker container rm -f myos
 ```bash
 docker image prune
 ```
+
+> 删除所有的停止的容器
+
+```bash
+sudo docker container prune
+```
+
+
 
 >删除镜像
 
