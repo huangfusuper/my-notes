@@ -64,6 +64,8 @@
 ### 9.[Netty](./Netty)
 
 > 1.[BIO通信机制弊端](./Netty/BIO通信机制弊端.md)
+>
+> 2.[ChannelInboundHandlerAdapter生命周期详解](./Netty/ChannelInboundHandlerAdapter生命周期详解.md)
 
 ### 10.[面试汇总](.\面试汇总)
 
