@@ -67,6 +67,44 @@ MESI协议：是以缓存行(缓存的基本数据单位，在Intel的CPU上一�
 
 > 其实JDK7的并发包中，著名的并发编程大师，Doug lea 新增了一个队列集合 Linked-TransferQueue 他用了一种特殊的方式优化了volatile,是一种追加字节的方式！我们以后可能会出一个详解的，想要探究他，就一定要探究到处理器的硬件配置！我们有时间再说！
 
+## 关于可见性的一个小案例
+
+```java
+public class NoVisibility {
+    private static boolean ready;
+    private static class ReaderThread extends Thread{
+        public void run(){
+            while (!ready) {
+                System.out.println(3);
+            }
+            System.out.println("-------------我是咋执行的？？-----------------");
+        }
+    }
+    public static void main(String args[]) throws Exception{
+        new ReaderThread().start();
+        ready=true;
+    }
+}
+```
+
+对于上面的一个代码，正常情况下，他应该一直输出3，但是如果发生脏读的情况！也就是缓存行的数据没有更新，那么有可能执行这个代码:
+
+```java
+System.out.println("-------------我是咋执行的？？-----------------");
+```
+
+## 什么是指令重排序
+
+> 在执行程序时，为了提高性能，编译器和处理器常常会对指令做重排序。
+
+![img](../image/4222138-0531c2c33ca2f3d2.webp)
+
+1. 编译器优化的重排序。编译器在不改变单线程程序语义的前提下，可以重新安排语句的执行顺序。
+
+2. 指令级并行的重排序。现代处理器采用了指令级并行技术（Instruction-LevelParallelism，ILP）来将多条指令重叠执行。如果不存在数据依赖性，处理器可以改变语句对应机器指令的执行顺序。
+
+3. 内存系统的重排序。由于处理器使用缓存和读/写缓冲区，这使得加载和存储操作看上去可能是在乱序执行。
+
 ## volatile是如何防止指令重排序的？
 
 从汇编语言中可以看到在对volatile变量赋值后会加一条`lock addl $0x0,(%rsp)`指令;lock指令具有内存屏障的作用，lock前后的指令不会重排序;
@@ -130,5 +168,6 @@ public class TestVolatile {
 
 ```java
 volatile boolean  flag = false;
+volatile int a = 0;
 ```
 
