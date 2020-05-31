@@ -82,3 +82,16 @@ D:\python\python.exe "D:/project/python project/lxml_project/lxml1.py"
 Process finished with exit code 0
 ```
 
+### 4.提取标签里面的属性值
+
+![image-20200526184742269](../image/image-20200526184742269.png)
+
+有时我们需要获取标签属性里面的值，此时使用text()是不能使用的，那么我们可以定位到该标签，直接@属性名获取。
+
+```python
+//*/div[@class="review-list chart"]/div/@data-cid
+```
+
+这个语法的意思是获取该标签下的`data-cid`属性的值
+
+![image-20200526185029049](../image/image-20200526185029049.png)
