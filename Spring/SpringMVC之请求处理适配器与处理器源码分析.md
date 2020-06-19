@@ -36,7 +36,7 @@ protected HandlerAdapter getHandlerAdapter(Object handler) throws ServletExcepti
         }
     }
     throw new ServletException("No adapter for handler [" + handler +
-                               "]: The DispatcherServlet configuration needs to include a HandlerAdapter that 									supports this 				handler");
+                               "]: The DispatcherServlet configuration needs to include a                                HandlerAdapter that supports this handler");
 }
 ```
 
@@ -45,3 +45,148 @@ protected HandlerAdapter getHandlerAdapter(Object handler) throws ServletExcepti
 ![1592546167426](../image/1592546167426.png)
 
 - 该方法会循环所有的适配器方案，直到直到合适的处理器，返回，否则就会抛出`ServletException`异常！
+
+## 2. 处理器源码解析
+
+> 当这个处理器返回之后，下一步就是要拿着这个处理器处理我们对应的方法！如何处理呢？我们回到最初的`org.springframework.web.servlet.DispatcherServlet#doDispatch`方法
+
+![image-20200619194220458](../image/image-20200619194220458.png)
+
+我们进入到处理器代码逻辑内部`org.springframework.web.servlet.mvc.method.AbstractHandlerMethodAdapter#handle`的
+
+`org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter#handleInternal`方法（注意这里我们以常用的 以`@Controller`方式注册的方式分析）
+
+下面看一段代码
+
+```java
+// 查看是否需要走同步块（一般情况下不会设置为同步）
+//session 是非线程安全的，如果需要保证用户能够在多次请求中正确的访问同一个 session ，就要将 synchronizeOnSession 设置为 TRUE 。
+if (this.synchronizeOnSession) {
+    HttpSession session = request.getSession(false);
+    if (session != null) {
+        Object mutex = WebUtils.getSessionMutex(session);
+        synchronized (mutex) {
+            mav = invokeHandlerMethod(request, response, handlerMethod);
+        }
+    }
+    else {
+        // No HttpSession available -> no mutex necessary
+        mav = invokeHandlerMethod(request, response, handlerMethod);
+    }
+}
+else {
+    // 我们点进去查看一下这个方法内部的实现
+    mav = invokeHandlerMethod(request, response, handlerMethod);
+}
+```
+
+> invocableMethod.invokeAndHandle(webRequest, mavContainer);方法内部实现！
+>
+> org.springframework.web.method.support.InvocableHandlerMethod#invokeForReques方法实现
+
+- 我们可以看到有这样一段逻辑代码
+
+```java
+@Nullable
+public Object invokeForRequest(NativeWebRequest request, 
+                               @Nullable ModelAndViewContainer mavContainer,
+                               Object... providedArgs) throws Exception {
+
+    Object[] args = getMethodArgumentValues(request, mavContainer, providedArgs);
+    if (logger.isTraceEnabled()) {
+        logger.trace("Arguments: " + Arrays.toString(args));
+    }
+    return doInvoke(args);
+}
+```
+
+- `getMethodArgumentValues`获取方法的参数，以及传递的值
+
+```java
+protected Object[] getMethodArgumentValues(NativeWebRequest request, @Nullable ModelAndViewContainer mavContainer,
+			Object... providedArgs) throws Exception {
+	//获取方法的参数列表（形参列表）
+    MethodParameter[] parameters = getMethodParameters();
+    if (ObjectUtils.isEmpty(parameters)) {
+        return EMPTY_ARGS;
+    }
+	//构建参数对象数组
+    Object[] args = new Object[parameters.length];
+    for (int i = 0; i < parameters.length; i++) {
+        //拿到参数对象
+        MethodParameter parameter = parameters[i];
+        parameter.initParameterNameDiscovery(this.parameterNameDiscoverer);
+        args[i] = findProvidedArgument(parameter, providedArgs);
+        if (args[i] != null) {
+            continue;
+        }
+        if (!this.resolvers.supportsParameter(parameter)) {
+            throw new IllegalStateException(formatArgumentError(parameter, "No suitable 										resolver"));
+        }
+        try {
+        //注意这个方法  重点这里是通过方法的参数名称 获取request对象里面对应的参数赋值给对应的参数对象
+            args[i] = this.resolvers.resolveArgument(parameter, mavContainer, 
+                                                     request, this.dataBinderFactory);
+        }
+        catch (Exception ex) {
+ 
+            if (logger.isDebugEnabled()) {
+                String exMsg = ex.getMessage();
+                if (exMsg != null && !exMsg.contains(parameter.getExecutable()
+                                                     .toGenericString())) {
+                    logger.debug(formatArgumentError(parameter, exMsg));
+                }
+            }
+            throw ex;
+        }
+    }
+    //获取到所有的参数和对应的参数的值之后，返回
+    return args;
+}
+```
+
+> doInvoke(Object... args)
+
+- 处理器开始反射执行该方法，具体的执行的主要逻辑如下：
+
+```java
+@Nullable
+protected Object doInvoke(Object... args) throws Exception {
+    ReflectionUtils.makeAccessible(getBridgedMethod());
+    try {
+        return getBridgedMethod().invoke(getBean(), args);
+    }
+    ...忽略..
+}
+```
+
+得到该方法对象，从Bean工厂中拿到该对象实例，传递参数进行设置行该方法，并获取方法的返回值！
+
+> 拿到返回值之后，逐级返回，回到`org.springframework.web.servlet.mvc.method.annotation.ServletInvocableHandlerMethod#invokeAndHandle`方法
+
+![image-20200619202052198](../image/image-20200619202052198.png)
+
+
+
+该方法最终调用的是`org.springframework.web.servlet.mvc.method.annotation.RequestResponseBodyMethodProcessor#handleReturnValue`
+
+```java
+@Override
+public void handleReturnValue(@Nullable Object returnValue, MethodParameter returnType,
+                              ModelAndViewContainer mavContainer, NativeWebRequest webRequest)
+    throws IOException, HttpMediaTypeNotAcceptableException, HttpMessageNotWritableException {
+
+    mavContainer.setRequestHandled(true);
+    ServletServerHttpRequest inputMessage = createInputMessage(webRequest);
+    ServletServerHttpResponse outputMessage = createOutputMessage(webRequest);
+
+    // Try even with null return value. ResponseBodyAdvice could get involved.
+    writeWithMessageConverters(returnValue, returnType, inputMessage, outputMessage);
+}
+```
+
+最终通过`writeWithMessageConverters(returnValue, returnType, inputMessage, outputMessage);`将执行结果写到页面（其实之前Servlet开发也是这样的逻辑，只不过SpringMvc进行了层层封装优化了而已）！
+
+不难看出，SpringMvc拦截请求到处理请求映射方法，虽然现在还没有说完，但是可以小小的总结一下：
+
+![](../image/springmvc流程.png)
