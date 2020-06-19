@@ -111,8 +111,8 @@ protected void processCandidateBean(String beanName) {
 ```java
 @Override
 protected boolean isHandler(Class<?> beanType) {
-return (AnnotatedElementUtils.hasAnnotation(beanType, Controller.class) ||
-AnnotatedElementUtils.hasAnnotation(beanType, RequestMapping.class));
+    return (AnnotatedElementUtils.hasAnnotation(beanType, Controller.class) ||
+    AnnotatedElementUtils.hasAnnotation(beanType, RequestMapping.class));
 }
 ```
 
@@ -120,13 +120,13 @@ AnnotatedElementUtils.hasAnnotation(beanType, RequestMapping.class));
 
 ```java
 Map<Method, T> methods = MethodIntrospector.selectMethods(userType,(MethodIntrospector.MetadataLookup<T>) method -> {
-try {
-return getMappingForMethod(method, userType);
-}
-      catch (Throwable ex) {
-          throw new IllegalStateException("Invalid mapping on handler class [" +
-                                          userType.getName() + "]: " + method, ex);
-      }
+    try {
+    return getMappingForMethod(method, userType);
+    }
+    catch (Throwable ex) {
+        throw new IllegalStateException("Invalid mapping on handler class [" +
+                                        userType.getName() + "]: " + method, ex);
+    }
   });
 ```
 
