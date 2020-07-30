@@ -1,6 +1,6 @@
 ## 一、概述
 
-长文警告，事实上我不愿意写太长的文章，一面是太冗余，一方面读者容易疲倦，但是只要是涉及到源码级别的，就肯定篇幅不短，因为太短肯定没意义也解释不清楚，但是相信，耐心看完这个文章一定会有所收获！
+> 长文警告，事实上我不愿意写太长的文章，一面是太冗余，一方面读者容易疲倦，但是只要是涉及到源码级别的，就肯定篇幅不短，因为太短肯定没意义也解释不清楚，但是相信，耐心看完这个文章一定会有所收获！
 
 最近有很多读者面试的时候都被问到了有关于Spring三级缓存的解决方案，很多读者在面试受挫之后，试着自己去读源码，试着去跟断点又发现一层套一层，一会自己就懵了，我这几天总结了一下，为了能够让读者更加的去了解Spring解决循环依赖问题，我决定从以下四个方面去讲述：
 
@@ -250,10 +250,10 @@ public class DebugTest {
 }
 ```
 
-进入到getBean --> doGetBean
+这一步主要就是`getBean`,你试想一下，按照Spring的命名规范，这里明明是在创建Bean为什么就起个名字叫`getBean`呢？他这么做肯定是有他的用意所在，他这么起名是因为，在属性注入的时候，发现依赖某一个属性并不会立即创建，而是会调用这个方法获取一遍，没有再去创建！不明白没关系，你记住这个地方，往下看！方法进入到`getBean `--> `doGetBean`
 
 ```java
-protected <T> T doGetBean(final String name, @Nullable final Class<T> requiredType,
+	protected <T> T doGetBean(final String name, @Nullable final Class<T> requiredType,
 			@Nullable final Object[] args, boolean typeCheckOnly) throws BeansException {
 
 		final String beanName = transformedBeanName(name);
@@ -314,7 +314,7 @@ protected <T> T doGetBean(final String name, @Nullable final Class<T> requiredTy
 	}
 ```
 
-- 进入到createBean里面
+- 之前手写了一遍解决循环依赖的代码，这里是不是很熟悉？这就是在缓存里面寻找对应的bean，当缓存有的时候直接返回，没有的时候才去创建！相信聪明的你一定若有所思!  这里极其重要，咱们进入到`createBean`里面
 
 ```java
 protected Object createBean(String beanName, RootBeanDefinition mbd, @Nullable Object[] args)
@@ -338,7 +338,7 @@ protected Object createBean(String beanName, RootBeanDefinition mbd, @Nullable O
 }
 ```
 
-- 进入到doCreateBean里面
+- 进入到`doCreateBean`里面
 
 ```java
 protected Object doCreateBean(final String beanName, final RootBeanDefinition mbd, final @Nullable Object[] args)
@@ -365,7 +365,7 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
 			....忽略不必要代码....
                 
 			//这个方法时将当前实例号的bean放置到三级缓存 三级缓存内部存放的时 beanName -> bean包装对象  这个样的kv键值对
-			//设置这个方法的目的时 Spring设计时是期望Spring再bean实例化之后去做代理对象的操作，而不是再创建的时候就判断是否是代理对象
+			//设置这个方法的目的时 Spring设计时是期望Spring再bean实例化之后去做代理对象的操作，而不是再创建的时候就判断是否 是代理对象
 			//但实际上如果发生了循环引用的话，被依赖的类就会被提前创建出来，并且注入到目标类中，为了保证注入的是一个实际的代理对象
             //所以Spring来了个偷天换日，偷梁换柱
 			//后续需要注入的时候，只需要通过工厂方法返回数据就可以了，在工厂里面可以做代理相关的操作，执行完代理操作后，在返回对象
@@ -378,7 +378,7 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
 		Object exposedObject = bean;
 		try {
 			//填充内部的属性
-			//这一步解决了循环依赖的问题，在这里发生了自动注入的逻辑
+			//☆这一步解决了循环依赖的问题，在这里发生了自动注入的逻辑
 			populateBean(beanName, mbd, instanceWrapper);
 			//执行初始化的逻辑  以及生命周期的回调
 			exposedObject = initializeBean(beanName, exposedObject, mbd);
@@ -395,7 +395,7 @@ protected Object doCreateBean(final String beanName, final RootBeanDefinition mb
 	}
 ```
 
-- 进入到 populateBean方法，这里执行属性注入，同时也解决了循环依赖！
+- 进入到`populateBean` 方法，这里执行属性注入，同时也解决了循环依赖！
 
 ```java
 protected void populateBean(String beanName, RootBeanDefinition mbd, @Nullable BeanWrapper bw) {
@@ -468,9 +468,7 @@ public void inject(Object target, @Nullable String beanName, @Nullable PropertyV
     Collection<InjectedElement> elementsToIterate = (checkedElements != null ? checkedElements : this.injectedElements);
     if (!elementsToIterate.isEmpty()) {
         for (InjectedElement element : elementsToIterate) {
-            if (logger.isTraceEnabled()) {
-                logger.trace("Processing injected element of bean '" + beanName + "': " + element);
-            }
+            ....忽略不必要代码....
             //注入逻辑发生的实际代码 因为是属性注入，所以 使用AutowiredFieldElement.inject
             element.inject(target, beanName, pvs);
         }
@@ -554,7 +552,7 @@ public Object resolveCandidate(String beanName, Class<?> requiredType, BeanFacto
 }
 ```
 
-哦吼，`gentBean` ，相信大家一定失忆了，你是不是在哪见过? 想想入口方法，里面是不是也是一个getBean，没错，他们俩是同一个方法，你会发现，最终需要注入的属性也会走一遍上述的逻辑从而完成属性对象的创建和获取，从而完成整个循环依赖！借用[YourBatman](https://me.csdn.net/f641385712)大佬的一张图，总结一下整个解决三级缓存的逻辑
+哦吼，`gentBean` ，相信大家一定失忆了，你是不是在哪见过? 想想上文我让你记住的那个地方，里面是不是也是一个getBean，没错，他们俩是同一个方法，你会发现，最终需要注入的属性也会走一遍上述的逻辑从而完成属性对象的创建和获取，从而完成整个循环依赖！借用[YourBatman](https://me.csdn.net/f641385712)大佬的一张图，总结一下整个解决三级缓存的逻辑
 
 ## 七、总结
 
@@ -563,3 +561,10 @@ public Object resolveCandidate(String beanName, Class<?> requiredType, BeanFacto
 读者可以参考着上述的源码逻辑实现对比看印象更深！
 
 本次我们先自定义实现了一个解决循环依赖的方案，然后分析了一下缺陷，然后对比Spring源码的解决方案，相信，读到这里，屏幕前的你一定有所收获！加油！
+
+-------------------------------------------
+
+好了，今天的文章到这里也就结束了，作者闲暇时间整理了一份资料，大家有兴趣可以关注公众号【`JAVA程序狗`】回复【`OMG`】领取下！
+
+![](https://imgconvert.csdnimg.cn/aHR0cDovL2ltYWdlcy5odWFuZ2Z1c3VwZXIuY24vdHlwb3JhLyVFNiU5RSVCNiVFNiU5RSU4NCVFNSVCOCU4OCVFOCVCNSU4NCVFNiU5NiU5OSVFNSVBNCVBNyVFNiU5NCVCRSVFOSU4MCU4MTA3MjUucG5n?x-oss-process=image/format,png)
+
