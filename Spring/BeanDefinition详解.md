@@ -61,6 +61,8 @@ Java中 Class对象可以描述一个JAVA Object，但是因为Spring Bean是一
 13. 调用bean的初始化方法
 14. 回调`BeanPostProcessors.postProcessAfterInitialization`方法
 
+![123](http://images.huangfusuper.cn/typora/123.png)
+
 ## 三、BeanDefinition详解
 
 ### 1. AbstractBeanDefinition
