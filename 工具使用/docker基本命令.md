@@ -152,3 +152,11 @@ ADD:COPY的增强版自动解压tar包
 docker build -t 标签名（自定） .
 ```
 
+
+
+
+
+```shell
+docker run -d -p 9999:80 --name nginx-docker-web -v /docker_local/docker_nginx/www/html/:/usr/share/nginx/html -v /docker_local/docker_nginx/conf/nginx.conf:/etc/nginx/nginx.conf -v /docker_local/docker_nginx/logs/:/var/log/nginx -v /docker_local/docker_nginx/conf.d/:/etc/nginx/conf.d/ nginx
+```
+
