@@ -144,6 +144,91 @@ Spring只是一个项目管理的框架，他也是由JAVA语言编写的，所�
 
 **至此，我们完成了整个MyBatis整合Spring的全部过程！**
 
+
+
+### 3.源码重点讲解
+
+#### 1）自定义扫描器
+
+在MyBatis内部是如何自定义扫描器的呢？而且还能打破Spring原有的扫描流程，将接口扫描进项目！
+
+![image-20200915215932029](http://images.huangfusuper.cn/typora/image-20200915215932029.png)
+
+整段代码大致分为两部分：
+
+1. 毋庸置疑，他是创建了一个Mybatis自己的扫描器，这个扫描器是`ClassPathBeanDefinitionScanner`子类，这也是Spring为我们提供的扩展点之一，我们可以基于该扫描器，扩展任意的类变成bd，当然，他需要符合我们的预设规则！什么是预设规则呢？我们可以看到在我圈的第一个红框里面似乎做了一个注册的操作，注册的什么呢？
+
+   ![image-20200915220235102](http://images.huangfusuper.cn/typora/image-20200915220235102.png)
+
+
+
+​				通常情况下该判断就都是为true的，所以这里会执行一个添加的逻辑，添加到哪里了呢？
+
+![image-20200915220432302](http://images.huangfusuper.cn/typora/image-20200915220432302.png)
+
+​				它添加到了一个集合里面！至此，我们至少知道了，这里会向集合里面添加一个过滤器，至于有什么用，我们后面会说到，你这里先记住！
+
+2. 我们再看第二个红框，开始执行扫描操作了！具体里面的代码我就不粘贴了，他会调用父类的扫描逻辑，我们直接看父类是如何做的！
+
+   ![image-20200915220818278](http://images.huangfusuper.cn/typora/image-20200915220818278.png)
+
+   
+
+   ​		
+
+   **这里将包路径转换为对应的bd，如何做的呢？**
+
+   
+
+![image-20200915221123343](http://images.huangfusuper.cn/typora/image-20200915221123343.png)
+
+这么长的逻辑，我们重点关注两个判断：
+
+- 第一个判断，会判断该类是否被过滤，到底该不该转换为`BeanDefinition`,还记得我们刚刚注册的那个过滤器吗？ 一个过滤器被添加进集合里面了，他就是在这里被使用的！
+
+![image-20200915221801594](http://images.huangfusuper.cn/typora/image-20200915221801594.png)
+
+因为那个过滤器的定义所以这里一定会返回为true!m所以我们第一个判断过了！一个类别转换成了`BeanDefinition`
+
+- 第二个判断，会调用子类的`isCandidateComponent`方法，这里是判断一个类到底需不需要被添加进集合里面返回，我们常识得知，Spring是不会替我们管理一个接口类的，但是Mapper类又偏偏是一个接口，所以这时MyBatis不得不改写原有的逻辑使得它支持扫描接口并转换为bd,我们看下里面的逻辑！
+
+![image-20200915221458473](http://images.huangfusuper.cn/typora/image-20200915221458473.png)
+
+因为MyBatis的Mapper类是一个接口，所以这里会返回为true!  所以我们第二个判断进去了，一个接口的`BeanDefinition`被添加进集合！并返回！
+
+至此，我们大概知道了扫描器的工作原理！我们看一下将接口扫描到之后做了那些操作呢？
+
+
+
+#### 2）通过BeanDefinition操作创建流程
+
+![image-20200915222512900](http://images.huangfusuper.cn/typora/image-20200915222512900.png)
+
+
+
+- 他会循环遍历所有扫描到的接口bd，向每一个bd的构造方法传递一个值，他是当前bd所代表的接口的全限定名！
+
+  上面介绍MyBatis扩展FactoryBean的时候说到！它通过jdk创建动态代理，但是接口时哪里来的？就是通过
+
+  ```java
+   definition.getConstructorArgumentValues().addGenericArgumentValue(beanClassName);
+  ```
+
+  注入进去的！我们都知道Spring创建对象是基于`definition`创建的，所以，我们可以通过`definition`来注入我们想要注入的值，他常用的用法还有类似下面的：
+
+  ![image-20200915223229818](http://images.huangfusuper.cn/typora/image-20200915223229818.png)
+
+  MyBatis 中正是使用构造函数 的方式注入了一个接口的值！
+
+  ![image-20200915223354790](http://images.huangfusuper.cn/typora/image-20200915223354790.png)
+
+- 强行将接口的类型转换为FactoryBean类型的！
+
+  至于为什么转换为FactoryBean文章开篇说的很清楚了，这里就不详细赘述了，他是为了延迟初始化，使用jdk动态代理返回一个对象！从而完成MyBatis的功能！
+
+
+
 ### 3. 总结
 
 ![MyBatis整合Spring的实例化过程](http://images.huangfusuper.cn/typora/MyBatis整合Spring的实例化过程.png)	
+
