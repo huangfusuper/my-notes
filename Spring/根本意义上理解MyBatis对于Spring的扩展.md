@@ -84,7 +84,7 @@ Spring只是一个项目管理的框架，他也是由JAVA语言编写的，所�
 
 > 我们试想以下，上面我们说呢，我们可以通过自定义扫描器将一个个接口转换成FactoryBean然后交给Spring管理，但是我们要扫描那个包下的类呢？
 >
-> 使用过Spring整合MyBatis的人都应该知道，我们一般都会再启动类上标注一个注解`@MapperScan`指定Mapper接口的为止，它的目的就是为了向`registerBeanDefinitions`方法传递扫描的路径，以此完成扫描！
+> 使用过Spring整合MyBatis的人都应该知道，我们一般都会再启动类上标注一个注解`@MapperScan`指定Mapper接口的包路径，它的目的就是为了向`registerBeanDefinitions`方法传递扫描的路径，以此完成扫描！
 
 ![image-20200914225321751](http://images.huangfusuper.cn/typora/image-20200914225321751.png)
 
@@ -106,77 +106,44 @@ Spring只是一个项目管理的框架，他也是由JAVA语言编写的，所�
 
 ![BeanDefinitionRegistryPostProcessor](http://images.huangfusuper.cn/typora/image-20200914230156140.png)
 
+## 五、MyBatis如何扩展的Spring呢？
 
+### 1. 扩展步骤（初始化步骤）
 
+我相信，通过上面的关键点的讲解，你现在心里应该有了一个差不多的概念！MyBatis扩展Spring的方式大概如下：
 
+1. 首先我们需要在配置类标注一个注解`MapperScan`,并且传入Mapper接口所在包路径！
 
+2. `MapperScan`会通过`@Import`注解向Spring注入一个`MapperScannerRegistrar`类，他是`ImportBeanDefinitionRegistrar`类型的，会被Spring自动回调`registerBeanDefinitions`方法！
 
+3. `MapperScannerRegistrar`的`registerBeanDefinitions`方法会构建一个类型为`MapperScannerConfigurer`的`BeanDefinition` ,他是`BeanDefinitionRegistryPostProcessor`类型的！然后注册进Spring容器里面！
 
+4. Spring生命周期会自动回调`MapperScannerConfigurer`的`postProcessBeanDefinitionRegistry`方法！
 
+5. `postProcessBeanDefinitionRegistry`方法内部创建了一个自定义的扫描器`ClassPathMapperScanner`,扫描你传入的包路径下的所有的接口，并转换为`BeanDefinition` !
 
+6. 获取到所由指定接口的`BeanDefinition`之后，遍历所有的`BeanDefinition`，然后修改他的`BeanClass`为`MapperFactoryBean`类，他是`FactoryBean`类型的！
 
+7. 设置完BeanClass之后，通过`definition.getPropertyValues().add()`方法，传入该`BeanDefinition`代表的接口！
 
+8. 将所有的`BeanDefinition`通过 6、7步骤设置之后，全部注册到bean工厂中！由BeanFactory对这些FactoryBean进行管理，和声明周期的管理！
 
+   
 
+   **注意，此时这些类并没有被实例化，被实例化的是你传入的`FactoryBean`类，真实的类还没有被实例化！**
 
 
 
+### 2. 扩展步骤（实例化步骤）
 
+1. 在使用或者获取这些bean的时候，Spring会首先获取你要使用的接口类型！
+2. 遍历当前容器内所有的bean逐个对比，当有匹配的直接返回！但是，因为Mapper接口还并没有被实例化！所以并没有找到，所以在遍历到`FactoryBean`的时候，会调用`getObjectType`方法，将返回值与你要使用的接口类型作比对！
+3. 当 FactoryBean的返回类型匹配的时候，Spring会调用`FactoryBean`的`getObject`方法将对象创建出来！
+4. 创建过程中，通过之前传入的接口，做`jdk动态代理`，完成MyBatis的代理逻辑！
+5. 对象创建完成后，通过`isSingleton`方法的返回值判断，如果是单例对象，就将该对象缓存起来！并返回！
 
+**至此，我们完成了整个MyBatis整合Spring的全部过程！**
 
+### 3. 总结
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+![MyBatis整合Spring的实例化过程](http://images.huangfusuper.cn/typora/MyBatis整合Spring的实例化过程.png)	
