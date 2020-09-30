@@ -29,9 +29,9 @@
 
 我们有了这两个Map对象，那么我们再次试图创建一个被循环依赖的bean!
 
-- 创建 `UserServiceImpl`完成后,把自己存到**singletonObjects**里面去，然后发现依赖`EmailServiceImpl` ！
+- 创建 `UserServiceImpl`完成后,把自己存到**earlySingletonObjects**里面去，然后发现依赖`EmailServiceImpl` ！
 - 于是试图从**singletonObjects**寻找，很显然是没有的，然后到**earlySingletonObjects**里面寻找发现也没有，开始新建！
-- 创建`EmailServiceImpl` 完成后，把自己存放到**singletonObjects**里面去，然后发现依赖`UserServiceImpl`！
+- 创建`EmailServiceImpl` 完成后，把自己存放到**earlySingletonObjects**里面去，然后发现依赖`UserServiceImpl`！
 - 于是试图从**singletonObjects**寻找，很显然是没有的，然后到**earlySingletonObjects**里面寻找，发现了`UserServiceImpl`对象！
 - 将**earlySingletonObjects**返回的对象`UserServiceImpl`设置到`EmailServiceImpl` 中去，创建完成！
 - 把自己放置到**singletonObjects**里面，然后把自己从**earlySingletonObjects**删除掉！返回！
