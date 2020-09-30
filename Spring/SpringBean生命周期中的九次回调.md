@@ -115,3 +115,5 @@ Spring在bean初始化前会回调【**BeanPostProcessor#postProcessBeforeInitia
 ## 十、总结
 
 ![BeanPostProcessor](http://images.huangfusuper.cn/typora/BeanPostProcessor.png)
+
+最后，祝大家双节快乐！另外，国庆期间作者就不更新了！我要出去浪一段时间，哈哈！然后作者是个穷屌丝，没钱发红包！告辞！
