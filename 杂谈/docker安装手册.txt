@@ -1,0 +1,50 @@
+#安装工具包
+sudo yum install -y yum-utils device-mapper-persistent-data lvm2
+sudo yum install -y yum-utils
+
+# 查看是否安装 device-mapper-persistent-data lvm2 yum-utils
+rpm -qa|grep device-mapper-persistent-data
+rpm -qa|grep lvm2
+rpm -qa|grep yum-utils
+
+#设置docker的yum源
+sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+#直接从官网下载Docker
+sudo yum install docker-ce docker-ce-cli containerd.io
+
+
+#从清华大学镜像站下载
+#查看yum源
+cd /etc/yum.repos.d/
+#修改yum源为清华大学镜像服务
+sudo vim docker-ce.repo
+:%s@https://download.docker.com/@https://mirrors.tuna.tsinghua.edu.cn/docker-ce/@
+#更新yum索引包
+sudo yum makecache fast
+
+#下载docker服务
+sudo yum install docker-ce docker-ce-cli containerd.io
+#安装指定版本
+yum list docker-ce.x86_64 --showduplicates | sort -r
+#查看版本
+docker version 
+
+#配置阿里云docker镜像加速
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json <<-'EOF'
+{
+  "registry-mirrors": ["https://c9uqxfg2.mirror.aliyuncs.com"]
+}
+EOF
+
+#重载配置文件
+sudo systemctl daemon-reload
+#重启docker
+sudo systemctl restart docker
+
+#启动docker
+sudo systemctl docker start
+#关闭docker
+sudo systemctl docker stop
+#设置开启自启docker
+systemctl enable docker
