@@ -402,3 +402,130 @@ docker build -t huangfutest:1.0 .
 # 后面运行不说了
 ```
 
+## 八、Docker Compose
+
+### 1.下载Compose
+
+> 官方镜像
+
+```shell
+sudo curl -L "https://github.com/docker/compose/releases/download/1.27.4/docker-compose-Linux-x86_64" -o /usr/local/bin/docker-compose
+```
+
+> 安装包授权
+
+```shell
+sudo chmod +x /usr/local/bin/docker-compose
+```
+
+### 2. 官网项目体验
+
+> 文档地址
+
+https://docs.docker.com/compose/gettingstarted/
+
+> 初级搭建初体验
+
+```shell
+ mkdir composetest
+ cd composetest
+ 
+ vim app.py
+```
+
+> 脚本内容
+
+```python
+ 
+ import time
+
+import redis
+from flask import Flask
+
+app = Flask(__name__)
+cache = redis.Redis(host='redis', port=6379)
+
+def get_hit_count():
+    retries = 5
+    while True:
+        try:
+            return cache.incr('hits')
+        except redis.exceptions.ConnectionError as exc:
+            if retries == 0:
+                raise exc
+            retries -= 1
+            time.sleep(0.5)
+
+@app.route('/')
+def hello():
+    count = get_hit_count()
+    return 'Hello World! I have been seen {} times.\n'.format(count)
+```
+
+```shell
+vim requirements.txt
+```
+
+> 文件内容
+
+```python
+flask
+redis
+```
+
+```shell
+vim Dockerfile
+```
+
+> 文件内容
+
+```shell
+FROM python:3.7-alpine
+WORKDIR /code
+ENV FLASK_APP=app.py
+ENV FLASK_RUN_HOST=0.0.0.0
+RUN apk add --no-cache gcc musl-dev linux-headers
+COPY requirements.txt requirements.txt
+RUN pip install -r requirements.txt
+EXPOSE 5000
+COPY . .
+CMD ["flask", "run"]
+```
+
+```she
+vim docker-compose.yml
+```
+
+> 文件内容
+
+```yml
+version: "3.8"
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+  redis:
+    image: "redis:alpine"
+```
+
+> 此时文件结构
+
+![image-20201102145803045](http://images.huangfusuper.cn/typora/image-20201102145803045.png)
+
+> 开始构建服务
+
+```shell
+docker-compose up
+```
+
+> 测试应用（使用redis当做计数器，点击一次，次数+1）
+
+
+
+> 以上步骤总结
+
+- 应用 APP.py
+- Dockerfile 应用打包为镜像
+- 定义Docker-compose.yml文件（定义整个服务，需要的环境.web、redis）
+- 启动 compose 项目
