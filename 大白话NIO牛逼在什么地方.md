@@ -178,7 +178,144 @@ public static void main(String[] args) throws IOException {
 
 ![](http://images.huangfusuper.cn/typora/202103101824.png)
 
+NIO底层在JDK1.4版本是用linux的内核函数select()或poll()来实现，跟上面的NioServer代码类似，selector每次都会轮询所有的sockchannel看下哪个channel有读写事件，有的话就处理，没有就继续遍历，JDK1.5开始引入了epoll基于事件响应机制来优化NIO，首先我们会将我们的SocketChannel注册到对应的选择器上并选择关注的事件，后续操作系统会根据我们设置的感兴趣的事件将完成的事件SocketChannel放回到选择器中，等待用户的处理！那么它能够解决上述的问题吗？
+
+肯定是可以的，因为上面的一个同步非阻塞I/O痛点在于CPU总是在做很多无用的轮询，在这个模型里被解决了！这个模型从selector中获取到的Channel全部是就绪的，后续只需要也就是说他每次轮询都不会做无用功！
+
+##### 深入 底层概念解析
+
+###### select模型
+
+如果要深入分析NIO的底层我们需要逐步的分析，首先，我们需要了解一种叫做select()函数的模型，它是什么呢？他也是NIO所使用的多路复用的模型之一，是JDK1.4的时候所使用的一种模型，他是epoll模型之前所普遍使用的一种模型，他的效率不高，但是当时被普遍使用，后来才会被人优化为epoll！
+
+他是如何做到多路复用的呢？如图：
+
+
+1. 首先我们需要了解操作系统有一个叫做工作队列的概念，由CPU轮流执行工作队列里面的进程，我们平时书写的Socket服务端客户端程序也是存在于工作队列的进程中，只要它存在于工作队列，它就会被CPU调用执行！我们下文将该网络程序称之为**进程A**
+
+![image-20210310223623730](http://images.huangfusuper.cn/typora/image-20210310223623730.png)
+
+2. 他的内部会维护一个 Socket列表，当调用系统函数select(socket[])的时候，操作系统会将**进程A**加入到Socket列表中的每一个Socket的等待队列中，同时将**进程A**从工作队列移除，此时，**进程A**处于阻塞状态！
+	![image-20210310223709483](http://images.huangfusuper.cn/typora/image-20210310223709483.png)
+
+3. 当网卡接收到数据之后，触发操作系统的中断程序，根据该程序的Socket端口取对应的Socket列表中寻找该**进程A**，并将**进程A**从所有的Socket列表中的等待队列移除，并加入到操作系统的工作队列！
+
+	![image-20210310223932406](http://images.huangfusuper.cn/typora/image-20210310223932406.png)
+
+4. 此时进程A被唤醒，此时知道至少有一个Socket存在数据，开始依次遍历所有的Socket，寻找存在数据的Socket并进行后续的业务操作
+
+	![image-20210310224109432](http://images.huangfusuper.cn/typora/image-20210310224109432.png)
+
+**该种结构的核心思想是，我先让所有的Socket都持有这个进程A的引用，当操作系统触发Socket中断之后，基于端口寻找到对应的Socket,就能够找到该Socket对应的进程，再基于进程，就能够找到所有被监控的Socket!   要注意，当进程A被唤醒，就证明一件事，操作系统发生了Socket中断，就至少有一个Socket的数据准备就绪，只需要将所有的Socket遍历，就能够找到并处理本次客户端传入的数据！**
+
+
+
+但是，你会发现，这种操作极为繁琐，中间似乎存在了很多遍历，先将进程A加入的所有的Socket等待队列需要遍历一次，发生中断之后需要遍历一次Socket列表，将所有对于进程A的引用移除，并将进程A的引用加入到工作队列！因为此时进程A并不知道哪一个Socket是有数据的，所以，由需要再次遍历一遍Socket列表，才能真正的处理数据，整个操作总共遍历了3此Socket，为了保证性能，所以1.4版本种，最多只能监控1024个Socket,去掉标准输出输出和错误输出只剩下1021个，因为如果Socket过多势必造成每次遍历消耗性能极大！
+
+###### epoll模型
+
+epoll总共分为三个比较重要的函数：
+
+1. **epoll_create** 对应JDK NIO代码种的**Selector.open()**
+2. **epoll_ctl** 对应JDK NIO代码中的**socketChannel.register(selector,xxxx);**
+3. **epoll_wait** 对应JDK NIO代码中的 **selector.select();**
+
+感兴趣的可以下载一个open-jdk-8u的源代码，也可以关注公众号回复openJdk获取源码压缩包！
+
+他是如何优化select的呢？
+
+
+1. **epoll_create**：这些系统调用将返回一个非负文件描述符，他也和Socket一样，存在一个等待队列，但是，他还存在一个就绪队列！
+
+	![image-20210310231234730](http://images.huangfusuper.cn/typora/image-20210310231234730.png)   
+
+2. **epoll_ctl** ：添加Socket的监视，对应Java中将SocketChannel注册到Selector中，他会将创建的文件描述符的引用添加到Socket的等待队列！这点比较难理解，注意是将**EPFD**（Epoll文件描述符）放到Socket的等待队列！
+
+   ![image-20210310231305931](http://images.huangfusuper.cn/typora/image-20210310231305931111.png)
+
+3. 当操作系统发生中断程序后，基于端口号（客户端的端口号是唯一的）寻找到对应的Socket,获取到**EPFD**的引用，将该Socket的引用加入到**EPFD**的就序列表！
+
+   ![image-20210310232256771](http://images.huangfusuper.cn/typora/image-20210310232256771.png)
+
+4. **epoll_wait**：查看**EPFD**的就绪列表是否存在Socket的引用，如果存在就直接返回，不存在就将进程A加入到**EPFD**的等待队列，并移除进程A再工作队列的引用！
+
+  ![image-20210310231400214](http://images.huangfusuper.cn/typora/image-20210310231400214.png)
+
+  ![image-20210310231425286](http://images.huangfusuper.cn/typora/image-20210310231425286.png)
+
+5. 当网卡再次接收到数据，发生中断，进行上述步骤，将该Socket的因引用加入到就序列表，并唤醒**进程A**，移除该**EPFD**等待队列的进程A，将进程A加入到工作队列，程序继续执行！
+
+   ![image-20210310232111376](http://images.huangfusuper.cn/typora/image-20210310232111376.png)
+
 ### 4. 异步非阻塞I/O
 
+异步非阻塞模型是用户应用只需要发出对应的事件，并注册对应的回调函数，由操作系统完成后，回调回调函数，完成具体的约为操作！先看一段代码
 
+```java
+public static void main(String[] args) throws Exception {
+        final AsynchronousServerSocketChannel serverChannel = AsynchronousServerSocketChannel.open().bind(new InetSocketAddress(9000));
+		//监听连接事件，并注册回调
+        serverChannel.accept(null, new CompletionHandler<AsynchronousSocketChannel, Object>() {
+            @Override
+            public void completed(AsynchronousSocketChannel socketChannel, Object attachment) {
+                try {
+                    System.out.println("2--"+Thread.currentThread().getName());
+                    // 再此接收客户端连接，如果不写这行代码后面的客户端连接连不上服务端
+                    serverChannel.accept(attachment, this);
+                    System.out.println(socketChannel.getRemoteAddress());
+                    ByteBuffer buffer = ByteBuffer.allocate(1024);
+                    //监听read事件并注册回调
+                    socketChannel.read(buffer, buffer, new CompletionHandler<Integer, ByteBuffer>() {
+                        @Override
+                        public void completed(Integer result, ByteBuffer buffer) {
+                            System.out.println("3--"+Thread.currentThread().getName());
+                            buffer.flip();
+                            System.out.println(new String(buffer.array(), 0, result));
+                            //向客户端回写一个数据
+                            socketChannel.write(ByteBuffer.wrap("HelloClient".getBytes()));
+                        }
+						//发生错误调这个
+                        @Override
+                        public void failed(Throwable exc, ByteBuffer buffer) {
+                            exc.printStackTrace();
+                        }
+                    });
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+			//发生错误调这个
+            @Override
+            public void failed(Throwable exc, Object attachment) {
+                exc.printStackTrace();
+            }
+        });
 
+        System.out.println("1--"+Thread.currentThread().getName());
+        Thread.sleep(Integer.MAX_VALUE);
+    }
+}
+```
+
+AIO客户端
+
+```java
+public static void main(String... args) throws Exception {
+    AsynchronousSocketChannel socketChannel = AsynchronousSocketChannel.open();
+    socketChannel.connect(new InetSocketAddress("127.0.0.1", 9000)).get();
+    socketChannel.write(ByteBuffer.wrap("HelloServer".getBytes()));
+    ByteBuffer buffer = ByteBuffer.allocate(512);
+    Integer len = socketChannel.read(buffer).get();
+    if (len != -1) {
+        System.out.println("客户端收到信息：" + new String(buffer.array(), 0, len));
+    }
+}
+```
+
+![image-20210310233152285](http://images.huangfusuper.cn/typora/image-20210310233152285.png)
+
+原谅我画图功底，整体逻辑就是，告诉系统我要关注一个连接的事件，如果有连接事件就调用我注册的这个回调函数，回调函数中获取到客户端的连接，然后再次注册一个read请求，告诉系统，如果有可读的数据就调用我注册的这个回调函数！当存在数据的时候，执行read回调，并写出数据！
+
+**为什么Netty使用NIO而不是AIO？**
+
+在Linux系统上，AIO的底层实现仍使用Epoll，没有很好实现AIO，因此在性能上没有明显的优势，而且被JDK封装了一层不容易深度优化，Linux上AIO还不够成熟。Netty是**异步非阻塞**框架，Netty在NIO上做了很多异步的封装。简单来说，现在的AIO实现比较鸡肋！
