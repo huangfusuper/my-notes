@@ -180,7 +180,7 @@ public static void main(String[] args) throws IOException {
 
 NIO底层在JDK1.4版本是用linux的内核函数select()或poll()来实现，跟上面的NioServer代码类似，selector每次都会轮询所有的sockchannel看下哪个channel有读写事件，有的话就处理，没有就继续遍历，JDK1.5开始引入了epoll基于事件响应机制来优化NIO，首先我们会将我们的SocketChannel注册到对应的选择器上并选择关注的事件，后续操作系统会根据我们设置的感兴趣的事件将完成的事件SocketChannel放回到选择器中，等待用户的处理！那么它能够解决上述的问题吗？
 
-肯定是可以的，因为上面的一个同步非阻塞I/O痛点在于CPU总是在做很多无用的轮询，在这个模型里被解决了！这个模型从selector中获取到的Channel全部是就绪的，后续只需要也就是说他每次轮询都不会做无用功！
+肯定是可以的，因为**上面的一个同步非阻塞I/O痛点在于CPU总是在做很多无用的轮询**，在这个模型里被解决了！这个模型从selector中获取到的Channel全部是就绪的，后续只需要也就是说他**每次轮询都不会做无用功！**
 
 ##### 深入 底层概念解析
 
