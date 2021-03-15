@@ -12,7 +12,7 @@
 
 但是如何保护呢？一方面，我们希望外部系统能够调用我的系统API，另一方面我又不想外部随意访问我的API怎么办呢? 此时，我们就要引申出来一个组件叫做kernel,你可以把它理解为一段程序，他在机器启动的时候被加载进来，被用于管理系统底层的一些设备，例如硬盘、内存、网卡等硬件设备！当我们又了kernel之后，会发生什么呢？
 
-我们还是以写出文件为例，当我们调用了一个write api的时候，他会将write的方法名以及参数加载到CPU的寄存器中，同时执行一个指令叫做  **int 0x80**的指令，int 0x80是 **interrupt 128（0x80的10进制）**的缩写，我们一般叫**80中断**，当调用了这个指令之后，CUP会停止当前的调度，保存当前的执行中的线程的状态，然后在中断向量表中寻找 128代表的回调函数，将之前写到寄存器中的数据（write \参数）当作参数，传递到这个回调函数中，由这个回调函数去寻找对应的系统函数write进行写出操作！
+我们还是以写出文件为例，当我们调用了一个write api的时候，他会将write的方法名以及参数加载到CPU的寄存器中，同时执行一个指令叫做  **int 0x80**的指令，int 0x80是 **interrupt 128（0x80的10进制）**的缩写，我们一般叫**80中断**，当调用了这个指令之后，CUP会停止当前的调度，保存当前的执行中的线程的状态，然后在中断向量表中寻找 128代表的回调函数，将之前写到寄存器中的数据（write /参数）当作参数，传递到这个回调函数中，由这个回调函数去寻找对应的系统函数write进行写出操作！
 
 大家回想一下，当系统发起一个调用后不再是用户程序直接调用系统API的而是切换成内核调用这些API，所以内核是以这种方式来保护系统的而且这也就是 **用户态切换到内核态**！
 
@@ -144,23 +144,212 @@ mmap所建立的虚拟空间，空间量事实上可以远大于物理内存空�
 
 ## nio的堆外内存
 
+堆外内存的实现类是`DirectByteBuffer`, 我们查看SocketChannel再向通道写入数据的时候的代码：
+
+![image-20210315121518393](http://images.huangfusuper.cn/typora/image-20210315121518393.png)
+
+这段代码是当你调用SocketChannel.write的时候的源代码，我们从代码中可以得知，无论你是否使用的是不是堆外内存，在内部NIO都会将其转换为堆外内存，然后在进行后续操作，那么堆外内存究竟有何种魔力呢？
+
+何为堆外内存，要知道我们的JAVA代码运行在了JVM容器里面，我们又叫做**Java虚拟机**，java开发者为了方便内存管理和内存分配，将JVM的空间与操作系统的空间隔离了起来，市面上所有的VM程序都是这样做的，VM程序的空间结构和操作系统的空间结构是不一样的，所以java程序无法直接的将数据写出去，必须先将数据拷贝到C的堆内存上也就是常说的堆外内存，然后在进行后续的读写，在NIO中直接使用堆外内存可以省去JVM内部数据向本次内存空间拷贝的步骤，加快处理速度！
+
+而且NIO中每次写入写出不在是以一个一个的字节写出，而是用了一个Buffer内存块的方式写出，也就是说只需要告诉CPU 我这个数据块的数据开始的索引以及数据偏移量就可以直接读取，但是JVM通过垃圾回收的时候，通过会做垃圾拷贝整理，这个时候会移动内存，这个时候如果内存地址改变，就势必会出现问题，所以我们要想一个办法，让JVM垃圾回收不影响这个数据块！
+
+总结来说：**它可以使用Native 函数库直接分配堆外内存，然后通过一个存储在Java 堆里面的DirectByteBuffer 对象作为这块内存的引用进行操作。这样能在一些场景中显著提高性能，因为避免了在Java 堆和Native 堆中来回复制数据。**
+
+**能够避免JVM垃圾回收过程中做内存整理，所产生的的问题，当数据产生在JVM内部的时候，JVM的垃圾回收就无法影响这部分数据了，而且能够变相的减轻JVM垃圾回收的压力！因为不用再管理这一部分数据了！**
+
+他的内存结构看起来像这样：
+
+![image-20210315125336866](http://images.huangfusuper.cn/typora/image-20210315125336866.png)
+
+为什么`DirectByteBuffer`就能够直接操作JVM外的内存呢？我们看下他的源码实现：
+
+```java
+DirectByteBuffer(int cap) { 
+		.....忽略....
+        try {
+            //分配内存
+            base = unsafe.allocateMemory(size);
+        } catch (OutOfMemoryError x) {
+            ....忽略....
+        }
+        ....忽略....
+        if (pa && (base % ps != 0)) {
+            //对齐page 计算地址并保存
+            address = base + ps - (base & (ps - 1));
+        } else {
+            //计算地址并保存
+            address = base;
+        }
+        //释放内存的回调
+        cleaner = Cleaner.create(this, new Deallocator(base, size, cap));
+        ....忽略..
+    }
+```
+
+我们主要关注：`unsafe.allocateMemory(size);`
+
+```java
+public native long allocateMemory(long var1);
+```
+
+我们可以看到他调用的是 native方法，这种方法通常由C++实现，是直接操作内存空间的，这个是被jdk进行安全保护的操作，也就是说你通过`Unsafe.getUnsafe()`是获取不到的，必须通过反射，具体的实现，自行翻阅浏览器！
+
+如此NIO就可以通过本地方法去操作JVM外的内存，但是大家有没有发现一点问题，我们现在是能够让操作系统直接读取数据了，而且也能够避免垃圾回收所带来的影响了还能减轻垃圾回收的压力，可谓是一举三得，但是大家有没有考虑过一个问题，这部分空间不经过垃JVM管理了，他该什么时候释放呢？JVM都管理不了了，那么堆外内存势必会导致OOM的出现，所以，我们必须要去手动的释放这个内存，但是手动释放对于编程复杂度难度太大，所以，JVM对堆外内存的管理也做了一部分优化，首先我们先看一下上述**DirectByteBuffer**中的`cleaner = Cleaner.create(this, new Deallocator(base, size, cap));`,这个对象，他主要用于堆外内存空间的释放；
+
+```java
+public class Cleaner extends PhantomReference<Object> {....}
+```
+
+### 虚引用
+
+Cleaner继承了一个PhantomReference，这代表着Cleaner是一个虚引用，有关强软弱虚引用的使用，请大家自行百度，Netty更新完成之后，我会写一篇文章做单独的介绍，这里就不一一介绍了，这里直接说**PhantomReference**虚引用：
+
+```java
+public class PhantomReference<T> extends Reference<T> {
+    public T get() {
+        return null;
+    }
+    public PhantomReference(T referent, ReferenceQueue<? super T> q) {
+        super(referent, q);
+    }
+}
+```
+
+虚引用的构造函数中要求必须传递的两个参数，被引用对象、引用队列！
+
+这两个参数的用意是什么呢，看个图
+
+![image-20210315131401311](http://images.huangfusuper.cn/typora/image-20210315131401311.png)
 
 
 
+JVM中判断一个对象是否需要回收，一般都是使用**可达性分析算法**，什么是可达性分析呢？就是从所谓的方法区、栈空间中找到被标记为root的节点，然后沿着**root节点向下找**，被找到的都任务是存活对象，当所有的root节点**寻找完毕后**，剩余的节点也就被认为是**垃圾对象**；
 
+依据上图，我们明显发现栈空间中持有对direct的引用，我们将该对象传递给弱引用和，弱引用也持有该对象，现在相当于direct引用和ref引用同时引用堆空间中的一块数据，当direct使用完毕后，该引用断开：
 
+![image-20210315131857691](http://images.huangfusuper.cn/typora/image-20210315131857691.png)
 
+JVM通过可待性分析算法，发现除了 ref引用之外，其余的没有人引用他，因为ref是虚引用，所以本次垃圾回收一定会回收它，回收的时候，做了一件什么事呢？
 
+我们在创建这个虚引用的时候传入了一个队列，在这个对象被回收的时候，被引用的对象会进入到这个回调！
 
+```java
+public class MyPhantomReference {
+    static ReferenceQueue<Object> queue = new ReferenceQueue<>();
+    public static void main(String[] args) throws InterruptedException {
+        byte[] bytes = new byte[10 * 1024];
+        //将该对象被虚引用引用
+        PhantomReference<Object> objectPhantomReference = new PhantomReference<Object>(bytes,queue);
+        //这个一定返回null  因为实在接口定义中写死的
+        System.out.println(objectPhantomReference.get());
+        //此时jvm并没有进行对象的回收，该队列返回为空
+        System.out.println(queue.poll());
+        //手动释放该引用，将该引用置为无效引用
+        bytes = null;
+        //触发gc
+        System.gc();
+        //这里返回的还是null  接口定义中写死的
+        System.out.println(objectPhantomReference.get());
+        //垃圾回收后，被回收对象进入到引用队列
+        System.out.println(queue.poll());
+    }
+}
+```
 
+基本了解了虚引用之后，我们再来看`DirectByteBuffer`对象，他在构造函数创建的时候引用看一个虚引用`Cleaner`！当这个DirectByteBuffer使用完毕后，DirectByteBuffer被JVM回收，触发Cleaner虚引用！JVM垃圾线程会将这个对象绑定到`Reference`对象中的`pending`属性中，程序启动后引用类`Reference`类会创建一条守护线程：
 
+```java
+static {
+        ThreadGroup tg = Thread.currentThread().getThreadGroup();
+        for (ThreadGroup tgn = tg;
+             tgn != null;
+             tg = tgn, tgn = tg.getParent());
+        Thread handler = new ReferenceHandler(tg, "Reference Handler");
+        //设置优先级为系统最高优先级
+        handler.setPriority(Thread.MAX_PRIORITY);
+        handler.setDaemon(true);
+        handler.start();
+		//.......................
+    }
+```
 
+我们看一下该线程的定义：
 
+```java
+static boolean tryHandlePending(boolean waitForNotify) {
+        Reference<Object> r;
+        Cleaner c;
+        try {
+            synchronized (lock) {
+                if (pending != null) {
+                   //......忽略
+                    c = r instanceof Cleaner ? (Cleaner) r : null;
+                    pending = r.discovered;
+                    r.discovered = null;
+                } else {
+                    //队列中没有数据结阻塞  RefQueue入队逻辑中有NF操作，感兴趣可以自己去看下
+                    if (waitForNotify) {
+                        lock.wait();
+                    }
+                    // retry if waited
+                    return waitForNotify;
+                }
+            }
+        } catch (OutOfMemoryError x) {
+            //发生OOM之后就让出线程的使用权，看能不能内部消化这个OOM
+            Thread.yield();
+            return true;
+        } catch (InterruptedException x) {
+            // 线程中断的话就直接返回
+            return true;
+        }
 
+        // 这里是关键，如果虚引用是一个 cleaner对象，就直接进行清空操作，不在入队
+        if (c != null) {
+            //TODO 重点关注
+            c.clean();
+            return true;
+        }
+		//如果不是 cleaner对象，就将该引用入队
+        ReferenceQueue<? super Object> q = r.queue;
+        if (q != ReferenceQueue.NULL) q.enqueue(r);
+        return true;
+    }
+```
 
+那我们此时就应该重点关注**c.clean();**方法了！
 
+```java
+this.thunk.run();
+```
 
+重点关注这个，thunk是一个什么对象？ 我们需要重新回到 DirectByteBuffer创建的时候，看看他传递的是什么。
 
+```java
+ cleaner = Cleaner.create(this, new Deallocator(base, size, cap));
+```
+
+我们可以看到，传入的是一个 `Deallocator`对象，那么他所调用的run方法，我们看下逻辑:
+
+```java
+public void run() {
+    if (address == 0) {
+        // Paranoia
+        return;
+    }
+    //释放内存
+    unsafe.freeMemory(address);
+    address = 0;
+    Bits.unreserveMemory(size, capacity);
+}
+```
+
+重点关注**unsafe.freeMemory(address);**这个就是释放内存的！
+
+至此，我们知道了JVM是如何管理堆外内存的了！
+
+![image-20210315143654610](http://images.huangfusuper.cn/typora/image-20210315143654610.png)
 
 
 
